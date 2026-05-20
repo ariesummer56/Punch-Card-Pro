@@ -1,0 +1,121 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    --background: 0 0% 3%;
+    --foreground: 0 0% 96%;
+
+    --card: 0 0% 7%;
+    --card-foreground: 0 0% 96%;
+
+    --popover: 0 0% 7%;
+    --popover-foreground: 0 0% 96%;
+
+    --primary: 358 78% 48%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 0 0% 12%;
+    --secondary-foreground: 0 0% 96%;
+
+    --muted: 0 0% 14%;
+    --muted-foreground: 0 0% 68%;
+
+    --accent: 358 82% 18%;
+    --accent-foreground: 0 0% 98%;
+
+    --success: 142 70% 45%;
+    --success-foreground: 0 0% 100%;
+
+    --destructive: 0 74% 48%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 18%;
+    --input: 0 0% 18%;
+    --ring: 358 78% 48%;
+
+    --radius: 0.75rem;
+
+    --sidebar-background: 210 33% 98%;
+    --sidebar-foreground: 218 39% 13%;
+    --sidebar-primary: 215 84% 34%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 212 38% 93%;
+    --sidebar-accent-foreground: 218 39% 13%;
+    --sidebar-border: 214 27% 86%;
+    --sidebar-ring: 215 84% 34%;
+
+    --gradient-hero: radial-gradient(circle at 20% 0%, hsl(358 78% 22%) 0%, hsl(0 0% 3%) 42%, hsl(0 0% 0%) 100%);
+    --shadow-brand: 0 22px 55px -24px hsl(358 78% 48% / 0.72);
+    --shadow-panel: 0 28px 80px -36px hsl(0 0% 0% / 0.9);
+    --shadow-soft: 0 20px 50px -32px hsl(358 78% 48% / 0.42);
+  }
+
+  .dark {
+    --background: 218 39% 9%;
+    --foreground: 210 33% 98%;
+
+    --card: 218 35% 12%;
+    --card-foreground: 210 33% 98%;
+
+    --popover: 218 35% 12%;
+    --popover-foreground: 210 33% 98%;
+
+    --primary: 210 86% 66%;
+    --primary-foreground: 218 39% 9%;
+
+    --secondary: 218 28% 18%;
+    --secondary-foreground: 210 33% 98%;
+
+    --muted: 218 28% 18%;
+    --muted-foreground: 214 22% 70%;
+
+    --accent: 166 62% 55%;
+    --accent-foreground: 177 67% 10%;
+
+    --success: 142 70% 45%;
+    --success-foreground: 0 0% 100%;
+
+    --destructive: 0 74% 58%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 218 28% 22%;
+    --input: 218 28% 22%;
+    --ring: 210 86% 66%;
+    --sidebar-background: 218 39% 9%;
+    --sidebar-foreground: 210 33% 98%;
+    --sidebar-primary: 210 86% 66%;
+    --sidebar-primary-foreground: 218 39% 9%;
+    --sidebar-accent: 218 28% 18%;
+    --sidebar-accent-foreground: 210 33% 98%;
+    --sidebar-border: 218 28% 22%;
+    --sidebar-ring: 210 86% 66%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+}
+
+@media print {
+  body * { visibility: hidden !important; }
+  #payroll-report-print, #payroll-report-print * { visibility: visible !important; }
+  #payroll-report-print { position: absolute; left: 0; top: 0; width: 100%; padding: 1rem; color: #000; }
+  [data-radix-dialog-overlay] { background: transparent !important; }
+}
