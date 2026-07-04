@@ -1,0 +1,1 @@
+REVOKE EXECUTE ON FUNCTION public.validate_job_schedule() FROM PUBLIC, anon, authenticated;

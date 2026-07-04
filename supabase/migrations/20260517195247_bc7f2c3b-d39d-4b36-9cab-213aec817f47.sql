@@ -1,0 +1,1 @@
+ALTER TABLE public.job_schedules ADD COLUMN duration_days integer NOT NULL DEFAULT 1 CHECK (duration_days >= 1);

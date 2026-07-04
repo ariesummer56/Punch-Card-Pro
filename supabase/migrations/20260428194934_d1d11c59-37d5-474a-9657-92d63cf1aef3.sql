@@ -1,0 +1,5 @@
+ALTER TABLE public.time_entries
+ADD COLUMN IF NOT EXISTS clock_out_latitude DOUBLE PRECISION,
+ADD COLUMN IF NOT EXISTS clock_out_longitude DOUBLE PRECISION,
+ADD COLUMN IF NOT EXISTS clock_out_accuracy_meters DOUBLE PRECISION,
+ADD COLUMN IF NOT EXISTS clock_out_distance_meters DOUBLE PRECISION;
