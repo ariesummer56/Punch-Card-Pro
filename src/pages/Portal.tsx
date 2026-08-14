@@ -104,6 +104,7 @@ type TimeEntry = {
   paid_start_at?: string | null;
   is_late?: boolean | null;
   late_minutes?: number | null;
+  note?: string | null;
 };
 
 type PtoBalance = {
@@ -1004,6 +1005,10 @@ const AdminDashboard = ({ managerOnly = false, loginPath = "/admin-login" }: { m
   const [adminJobLocationCheck, setAdminJobLocationCheck] = useState<LocationCheckState>({ status: "idle", message: "Select a job and refresh GPS before clocking in or out." });
   const [jobPinDraft, setJobPinDraft] = useState<{ jobId: string; latitude: string; longitude: string; accuracy?: number; isLocating: boolean; isSaving: boolean } | null>(null);
   const [calendarMonth, setCalendarMonth] = useState(today().slice(0, 7));
+  const [endShiftDialogOpen, setEndShiftDialogOpen] = useState(false);
+  const [endShiftNote, setEndShiftNote] = useState("");
+  const [missedClockInDialogOpen, setMissedClockInDialogOpen] = useState(false);
+  const [missedClockInForm, setMissedClockInForm] = useState<{ job_id: string; clock_in_at: string; clock_out_at: string; note: string }>({ job_id: "", clock_in_at: "", clock_out_at: "", note: "" });
   const [jobSchedules, setJobSchedules] = useState<JobSchedule[]>([]);
   const [scheduleDialog, setScheduleDialog] = useState<{ date: string; editingId?: string } | null>(null);
   const [scheduleForm, setScheduleForm] = useState<{ jobId: string; startTime: string; note: string; durationDays: number }>({ jobId: "", startTime: "", note: "", durationDays: 1 });
@@ -6437,7 +6442,7 @@ const EmployeeDashboard = () => {
     return all.some((e) => e.employee_user_id === userId && e.work_date === todayIso && e.is_shift_end);
   }, [weekEntries, timeEntry, userId]);
 
-  const endShift = async () => {
+  const endShift = () => {
     if (!timeEntry?.id || !timeEntry.clock_in_at || timeEntry.clock_out_at) {
       toast.error("No active shift to end.");
       return;
@@ -6446,8 +6451,12 @@ const EmployeeDashboard = () => {
       toast.error("Tap Refresh GPS before ending the shift.");
       return;
     }
-    const confirmed = window.confirm("End your shift for the day? You won't be able to clock back in until tomorrow.");
-    if (!confirmed) return;
+    setEndShiftNote("");
+    setEndShiftDialogOpen(true);
+  };
+
+  const confirmEndShift = async () => {
+    if (!timeEntry?.id || !timeEntry.clock_in_at || timeEntry.clock_out_at) return;
     setTimeActionSaving(true);
     try {
       const nowIso = new Date().toISOString();
@@ -6459,13 +6468,56 @@ const EmployeeDashboard = () => {
         clock_out_distance_meters: locationCheck.distance,
         is_shift_end: true,
         is_saved: true,
+        note: endShiftNote.trim() || null,
       }).eq("id", timeEntry.id).select("*").single();
       if (error) throw error;
       setTimeEntry(data);
       setWeekEntries((entries) => [data, ...entries.filter((e) => e.id !== data.id)]);
-      toast.success("Shift ended for the day. Clock-ins are locked until tomorrow.");
+      toast.success("Shift ended. You can clock back in if you work more today.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to end shift");
+    } finally {
+      setTimeActionSaving(false);
+      setEndShiftDialogOpen(false);
+    }
+  };
+
+  const submitMissedClockIn = async () => {
+    if (!missedClockInForm.job_id || !missedClockInForm.clock_in_at) {
+      toast.error("Select a job and enter a clock-in time.");
+      return;
+    }
+    if (!assignedJobIds.includes(missedClockInForm.job_id)) {
+      toast.error("You are not assigned to this job.");
+      return;
+    }
+    setTimeActionSaving(true);
+    try {
+      const clockInIso = new Date(missedClockInForm.clock_in_at).toISOString();
+      const clockOutIso = missedClockInForm.clock_out_at ? new Date(missedClockInForm.clock_out_at).toISOString() : null;
+      const totalMinutes = clockOutIso
+        ? Math.max(0, Math.floor((new Date(clockOutIso).getTime() - new Date(clockInIso).getTime()) / 60000))
+        : 0;
+      const clientSyncId = localQueueId();
+      const { data, error } = await db.from("time_entries").insert({
+        employee_user_id: userId,
+        job_id: missedClockInForm.job_id,
+        work_date: clockInIso.slice(0, 10),
+        clock_in_at: clockInIso,
+        clock_out_at: clockOutIso,
+        break_minutes: 0,
+        total_minutes: totalMinutes,
+        note: missedClockInForm.note.trim() || "Employee added missed clock-in",
+        client_sync_id: clientSyncId,
+        is_saved: true,
+      }).select("*").single();
+      if (error) throw error;
+      setWeekEntries((entries) => [data, ...entries]);
+      setMissedClockInDialogOpen(false);
+      setMissedClockInForm({ job_id: "", clock_in_at: "", clock_out_at: "", note: "" });
+      toast.success("Missed clock-in added.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to add missed clock-in");
     } finally {
       setTimeActionSaving(false);
     }
@@ -6552,9 +6604,9 @@ const EmployeeDashboard = () => {
             <p className="mt-2 text-muted-foreground">Week total: {formatHours(weeklyMinutes)}</p>
             <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
               {isClockedIn && selectedJobId && selectedJobId !== timeEntry?.job_id ? (
-                <Button className="h-20 flex-col text-base" disabled={timeActionSaving || !isSelectedJobAssigned || !!selectedJob?.archived_at || !isLocationCleared(locationCheck) || locationCheck.jobId !== selectedJobId || shiftEndedToday} onClick={() => switchJob(selectedJobId)}>{timeActionSaving ? <Loader2 className="h-7 w-7 animate-spin" /> : <Play className="h-7 w-7" />}Switch to {selectedJob?.job_name ?? "this job"}</Button>
+                <Button className="h-20 flex-col text-base" disabled={timeActionSaving || !isSelectedJobAssigned || !!selectedJob?.archived_at || !isLocationCleared(locationCheck) || locationCheck.jobId !== selectedJobId} onClick={() => switchJob(selectedJobId)}>{timeActionSaving ? <Loader2 className="h-7 w-7 animate-spin" /> : <Play className="h-7 w-7" />}Switch to {selectedJob?.job_name ?? "this job"}</Button>
               ) : (
-                <Button className="h-20 flex-col text-base" disabled={timeActionSaving || !selectedJobId || !isSelectedJobAssigned || !!selectedJob?.archived_at || !isLocationCleared(locationCheck) || locationCheck.jobId !== selectedJobId || isClockedIn || shiftEndedToday} onClick={() => upsertEntry({ clock_in_at: new Date().toISOString() })}>{timeActionSaving ? <Loader2 className="h-7 w-7 animate-spin" /> : <Play className="h-7 w-7" />}Clock in</Button>
+                <Button className="h-20 flex-col text-base" disabled={timeActionSaving || !selectedJobId || !isSelectedJobAssigned || !!selectedJob?.archived_at || !isLocationCleared(locationCheck) || locationCheck.jobId !== selectedJobId || isClockedIn} onClick={() => upsertEntry({ clock_in_at: new Date().toISOString() })}>{timeActionSaving ? <Loader2 className="h-7 w-7 animate-spin" /> : <Play className="h-7 w-7" />}Clock in</Button>
               )}
               <Button className="h-20 flex-col text-base" variant="outline" disabled={timeActionSaving || !timeEntry?.clock_in_at || !!timeEntry?.clock_out_at} onClick={() => upsertEntry({ break_minutes: (timeEntry?.break_minutes ?? 0) + 30 })}>{timeActionSaving ? <Loader2 className="h-7 w-7 animate-spin" /> : <Coffee className="h-7 w-7" />}Break +30</Button>
               <Button className="h-20 flex-col text-base" variant="secondary" disabled={timeActionSaving || !timeEntry?.clock_in_at || !!timeEntry?.clock_out_at || !isLocationCleared(locationCheck) || locationCheck.jobId !== timeEntry?.job_id} onClick={endShift}>{timeActionSaving ? <Loader2 className="h-7 w-7 animate-spin" /> : <Square className="h-7 w-7" />}End shift</Button>
@@ -6562,7 +6614,7 @@ const EmployeeDashboard = () => {
             {shiftEndedToday ? (
               <div className="mt-3 rounded-lg border border-primary/40 bg-primary/10 p-3 text-sm">
                 <p className="font-semibold text-primary">Shift ended for today</p>
-                <p className="mt-1 text-xs text-muted-foreground">Clock-ins are locked until tomorrow. Contact your admin if you need a correction.</p>
+                <p className="mt-1 text-xs text-muted-foreground">You can still clock in for another job if needed. Tap a job above to get started.</p>
               </div>
             ) : null}
             {todaySummary.count > 0 ? (
@@ -6595,6 +6647,74 @@ const EmployeeDashboard = () => {
               {queuedTimeActionCount ? <p className="mt-1 text-xs text-muted-foreground">{queuedTimeActionCount} pending {queuedTimeActionCount === 1 ? "action" : "actions"} will retry automatically.</p> : <p className="mt-1 text-xs text-muted-foreground">Clock actions auto-save immediately; no manual save is required.</p>}
             </div>
             <p className="mt-4 text-sm text-muted-foreground">GPS verification is required to clock in and clock out within 100 meters of the job pin.</p>
+            <div className="mt-3 flex gap-2">
+              <Button type="button" variant="outline" className="h-10" onClick={() => { setMissedClockInForm({ job_id: assignedJobIds[0] ?? "", clock_in_at: "", clock_out_at: "", note: "" }); setMissedClockInDialogOpen(true); }}>
+                <Plus className="h-4 w-4" /> Missed clock-in
+              </Button>
+            </div>
+
+            {/* End of shift dialog — single description prompt */}
+            <Dialog open={endShiftDialogOpen} onOpenChange={setEndShiftDialogOpen}>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle>End your shift</DialogTitle>
+                  <DialogDescription>Add a note about what you worked on today (optional), then confirm to end your shift.</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-3 py-2">
+                  <Label htmlFor="end-shift-note">What did you work on today?</Label>
+                  <Textarea id="end-shift-note" maxLength={500} value={endShiftNote} onChange={(e) => setEndShiftNote(e.target.value)} placeholder="e.g. Finished siding on the south side, cleaned up debris" />
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setEndShiftDialogOpen(false)}>Cancel</Button>
+                  <Button onClick={confirmEndShift} disabled={timeActionSaving}>
+                    {timeActionSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Square className="h-4 w-4" />}
+                    End shift
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            {/* Missed clock-in dialog */}
+            <Dialog open={missedClockInDialogOpen} onOpenChange={setMissedClockInDialogOpen}>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Add missed clock-in</DialogTitle>
+                  <DialogDescription>Forgot to clock in for a job? Add it here. Your admin will see the note.</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-3 py-2">
+                  <div className="space-y-2">
+                    <Label>Job</Label>
+                    <Select value={missedClockInForm.job_id} onValueChange={(v) => setMissedClockInForm((c) => ({ ...c, job_id: v }))}>
+                      <SelectTrigger><SelectValue placeholder="Select job" /></SelectTrigger>
+                      <SelectContent>
+                        {clockInJobs.filter((j) => !j.archived_at && assignedJobIds.includes(j.id)).map((job) => (
+                          <SelectItem key={job.id} value={job.id}>{job.job_name} — {job.address}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="missed-clock-in-time">Clock in time</Label>
+                    <Input id="missed-clock-in-time" type="datetime-local" value={missedClockInForm.clock_in_at} onChange={(e) => setMissedClockInForm((c) => ({ ...c, clock_in_at: e.target.value }))} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="missed-clock-out-time">Clock out time (optional)</Label>
+                    <Input id="missed-clock-out-time" type="datetime-local" value={missedClockInForm.clock_out_at} onChange={(e) => setMissedClockInForm((c) => ({ ...c, clock_out_at: e.target.value }))} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="missed-note">Note</Label>
+                    <Textarea id="missed-note" maxLength={500} value={missedClockInForm.note} onChange={(e) => setMissedClockInForm((c) => ({ ...c, note: e.target.value }))} placeholder="e.g. Forgot to clock in when I switched jobs at lunch" />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setMissedClockInDialogOpen(false)}>Cancel</Button>
+                  <Button onClick={submitMissedClockIn} disabled={timeActionSaving || !missedClockInForm.job_id || !missedClockInForm.clock_in_at}>
+                    {timeActionSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                    Add clock-in
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
             {timeEntry?.clock_out_at ? (
               <div className="mt-5 rounded-lg border bg-card p-4">
                 <p className="font-medium">End of day total: {formatHours(timeEntry.total_minutes || dailyMinutes)}</p>
