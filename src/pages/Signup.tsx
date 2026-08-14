@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
+import { track, trackConversion } from "@/lib/analytics";
 
 const signupFields = {
   displayName: z.string().trim().max(120).optional(),
@@ -192,7 +193,9 @@ const Signup = ({ mode }: SignupProps) => {
     if (!signupData.session) {
       setLoading(false);
       setVerificationEmail(values.email);
-      toast.success("Account created. Check your email to verify it before signing in.");
+      track("sign_up");
+        trackConversion("sign_up_complete");
+        toast.success("Account created. Check your email to verify it before signing in.");
       return;
     }
 

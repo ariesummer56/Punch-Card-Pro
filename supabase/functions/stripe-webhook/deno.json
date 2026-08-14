@@ -1,0 +1,4 @@
+{
+  "name": "stripe-webhook",
+  "importMap": "../_shared/import_map.json"
+}

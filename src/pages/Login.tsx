@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { lovable } from "@/integrations/lovable";
 import { supabase } from "@/integrations/supabase/client";
+import { track, trackConversion } from "@/lib/analytics";
 
 const loginSchema = z.object({
   email: z.string().trim().email("Enter a valid email address").max(255),
@@ -179,6 +180,7 @@ const Login = ({ portal }: LoginProps) => {
     }
 
     toast.success("Signed in successfully");
+    track(`login_${portal}` as any, { method: "email" });
     await routeByRole(portal);
     setLoading(false);
   };
@@ -201,6 +203,7 @@ const Login = ({ portal }: LoginProps) => {
   const handleDemoLogin = () => {
     sessionStorage.setItem("punchCardProDemoRole", portal);
     toast.success(`${portal === "admin" ? "Admin" : portal === "manager" ? "Manager" : "Employee"} demo loaded`);
+    track("demo_launch" as any, { portal });
     navigate(portal === "admin" ? "/admin" : portal === "manager" ? "/manager" : "/employee");
   };
 

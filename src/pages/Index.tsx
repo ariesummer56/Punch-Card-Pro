@@ -209,6 +209,8 @@ const Index = () => {
             <Link to="/admin-login" className="transition-colors hover:text-foreground">Admin Login</Link>
             <Link to="/employee-login" className="transition-colors hover:text-foreground">Employee Login</Link>
             <Link to="/request-demo" className="transition-colors hover:text-foreground">Request Demo</Link>
+            <Link to="/terms" className="transition-colors hover:text-foreground">Terms</Link>
+            <Link to="/privacy" className="transition-colors hover:text-foreground">Privacy</Link>
           </nav>
         </div>
       </footer>

@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /admin-login
+Disallow: /manager
+Disallow: /manager-login
+Disallow: /employee
+Disallow: /employee-login
+Disallow: /portal
+Disallow: /set-password
+
+Sitemap: https://punchcardpro.io/sitemap.xml
