@@ -587,7 +587,7 @@ const demoUserRoles: UserRoleRow[] = [
 ];
 
 const demoJobs: Job[] = [
-  { id: "demo-job-1", job_name: "Westbrook Office Buildout", job_description: "Suite wiring and panel trim", address: "410 Market Street", city: "Cedar Falls", state: "IA", latitude: 42.5349, longitude: -92.4453 },
+  { id: "demo-job-1", job_name: "Westbrook Office Buildout", job_description: "Suite wiring and panel trim", manager_notes: "Park in back lot. Use service entrance. Ask for Tom on arrival.", address: "410 Market Street", city: "Cedar Falls", state: "IA", latitude: 42.5349, longitude: -92.4453 },
   { id: "demo-job-2", job_name: "North Yard Service Call", job_description: "Exterior lighting repair", address: "88 Industrial Park Road", city: "Waterloo", state: "IA", latitude: 42.4928, longitude: -92.3426 },
   { id: "demo-job-3", job_name: "Old Depot Retrofit", job_description: "Completed low-voltage retrofit", address: "12 Depot Lane", city: "Waterloo", state: "IA", latitude: 42.5012, longitude: -92.3361, archived_at: new Date(Date.now() - 2 * 86400000).toISOString() },
 ];
@@ -1005,10 +1005,6 @@ const AdminDashboard = ({ managerOnly = false, loginPath = "/admin-login" }: { m
   const [adminJobLocationCheck, setAdminJobLocationCheck] = useState<LocationCheckState>({ status: "idle", message: "Select a job and refresh GPS before clocking in or out." });
   const [jobPinDraft, setJobPinDraft] = useState<{ jobId: string; latitude: string; longitude: string; accuracy?: number; isLocating: boolean; isSaving: boolean } | null>(null);
   const [calendarMonth, setCalendarMonth] = useState(today().slice(0, 7));
-  const [endShiftDialogOpen, setEndShiftDialogOpen] = useState(false);
-  const [endShiftNote, setEndShiftNote] = useState("");
-  const [missedClockInDialogOpen, setMissedClockInDialogOpen] = useState(false);
-  const [missedClockInForm, setMissedClockInForm] = useState<{ job_id: string; clock_in_at: string; clock_out_at: string; note: string }>({ job_id: "", clock_in_at: "", clock_out_at: "", note: "" });
   const [jobSchedules, setJobSchedules] = useState<JobSchedule[]>([]);
   const [scheduleDialog, setScheduleDialog] = useState<{ date: string; editingId?: string } | null>(null);
   const [scheduleForm, setScheduleForm] = useState<{ jobId: string; startTime: string; note: string; durationDays: number }>({ jobId: "", startTime: "", note: "", durationDays: 1 });
@@ -5912,6 +5908,7 @@ const EmployeeDashboard = () => {
   const [savingPassword, setSavingPassword] = useState(false);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [assignedJobIds, setAssignedJobIds] = useState<string[]>([]);
+  const [assignmentNotes, setAssignmentNotes] = useState<Record<string, string | null>>({});
   const [selectedJobId, setSelectedJobId] = useState("");
   const [timeEntry, setTimeEntry] = useState<TimeEntry | null>(null);
   const [timeActionSaving, setTimeActionSaving] = useState(false);
@@ -5924,6 +5921,10 @@ const EmployeeDashboard = () => {
   const [companyInfo, setCompanyInfo] = useState<{ name?: string | null; contact_email?: string | null; contact_phone?: string | null; admin_alert_email?: string | null } | null>(null);
   const [locationCheck, setLocationCheck] = useState<LocationCheckState>({ status: "idle", message: "Refresh your GPS location before clocking in or out." });
   const [calendarMonth, setCalendarMonth] = useState(today().slice(0, 7));
+  const [endShiftDialogOpen, setEndShiftDialogOpen] = useState(false);
+  const [endShiftNote, setEndShiftNote] = useState("");
+  const [missedClockInDialogOpen, setMissedClockInDialogOpen] = useState(false);
+  const [missedClockInForm, setMissedClockInForm] = useState<{ job_id: string; clock_in_at: string; clock_out_at: string; note: string }>({ job_id: "", clock_in_at: "", clock_out_at: "", note: "" });
 
   const selectedJob = jobs.find((job) => job.id === selectedJobId);
   const activeJob = jobs.find((job) => job.id === timeEntry?.job_id);
@@ -5951,6 +5952,7 @@ const EmployeeDashboard = () => {
         setCompanyName("Ridgeway Electrical");
         setJobs(demoJobs);
         setAssignedJobIds(["demo-job-1", "demo-job-2"]);
+        setAssignmentNotes({ "demo-job-1": "Lead on panel trim", "demo-job-2": null });
         setSelectedJobId("demo-job-1");
         setLocationCheck({ status: "confirmed", message: "Location confirmed — within 100 meters", latitude: 42.53491, longitude: -92.44529, accuracy: 12, distance: 2 });
         setTimeEntry({ id: "demo-entry-today", employee_user_id: "demo-employee-1", job_id: "demo-job-1", work_date: today(), clock_in_at: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(), break_minutes: 30, clock_out_at: null, total_minutes: 0, is_saved: false });
@@ -5998,7 +6000,7 @@ const EmployeeDashboard = () => {
       const monthlyStartIso = calendarRangeStart.toISOString().slice(0, 10);
       const [{ data: profileData }, { data: assignmentData }, { data: todayEntry }, { data: activeEntry }, { data: monthlyData }, { data: ptoData }, { data: approvedData }] = await Promise.all([
         db.from("profiles").select("display_name, phone, emergency_contact, email, payroll_email, employee_pin, hire_date, company_id, company_name").eq("user_id", currentUserId).maybeSingle(),
-        db.from("employee_job_assignments").select("job_id").eq("employee_user_id", currentUserId),
+        db.from("employee_job_assignments").select("job_id, assignment_note").eq("employee_user_id", currentUserId),
         db.from("time_entries").select("*").eq("employee_user_id", currentUserId).eq("work_date", today()).order("created_at", { ascending: false }).limit(1).maybeSingle(),
         db.from("time_entries").select("*").eq("employee_user_id", currentUserId).not("clock_in_at", "is", null).is("clock_out_at", null).maybeSingle(),
         db.from("time_entries").select("*").eq("employee_user_id", currentUserId).gte("work_date", monthlyStartIso).order("work_date", { ascending: false }),
@@ -6021,9 +6023,12 @@ const EmployeeDashboard = () => {
       const currentEntry = activeEntry ?? todayEntry;
       const assignedIds: string[] = Array.from(new Set((assignmentData ?? []).map((assignment: { job_id: string }) => assignment.job_id).filter((jobId): jobId is string => typeof jobId === "string" && !!jobId)));
       setAssignedJobIds(assignedIds);
+      const assignmentNotesMap: Record<string, string | null> = {};
+      (assignmentData ?? []).forEach((assignment: { job_id: string; assignment_note?: string | null }) => { if (assignment.job_id) assignmentNotesMap[assignment.job_id] = assignment.assignment_note ?? null; });
+      setAssignmentNotes(assignmentNotesMap);
       const visibleJobIds = Array.from(new Set([...assignedIds, currentEntry?.job_id].filter(Boolean) as string[]));
       if (visibleJobIds.length) {
-          const { data: jobsData } = await db.from("jobs").select("id, job_name, job_description, address, city, state, latitude, longitude, archived_at").in("id", visibleJobIds).order("job_name");
+          const { data: jobsData } = await db.from("jobs").select("id, job_name, job_description, manager_notes, address, city, state, latitude, longitude, archived_at").in("id", visibleJobIds).order("job_name");
         setJobs(jobsData ?? []);
       } else {
         setJobs([]);
@@ -6585,6 +6590,8 @@ const EmployeeDashboard = () => {
             <p className="font-medium text-foreground">{selectedJob.address}, {selectedJob.city}, {selectedJob.state}</p>
             <p className="text-sm font-medium text-foreground">{selectedJob.job_name}</p>
             <p className="text-muted-foreground">{selectedJob.job_description || "No job description added yet."}</p>
+            {selectedJob.manager_notes ? <div className="rounded-md border border-primary/30 bg-primary/5 p-3"><p className="text-xs font-semibold uppercase tracking-wide text-primary">Manager Notes</p><p className="mt-1 text-foreground">{selectedJob.manager_notes}</p></div> : null}
+            {assignmentNotes[selectedJob.id] ? <div className="rounded-md border border-primary/30 bg-primary/5 p-3"><p className="text-xs font-semibold uppercase tracking-wide text-primary">Your Assignment Notes</p><p className="mt-1 text-foreground">{assignmentNotes[selectedJob.id]}</p></div> : null}
             <p className="text-muted-foreground">{selectedJob.latitude != null && selectedJob.longitude != null ? `GPS pin active · 100 meter clock-in and clock-out radius` : "This job does not have a GPS pin yet."}</p>
             <div className={locationCheck.status === "blocked" ? "rounded-md border border-destructive/40 bg-card p-3" : "rounded-md border bg-card p-3"}>
               <p className={locationCheck.status === "confirmed" ? "font-medium text-primary" : locationCheck.status === "blocked" ? "font-medium text-destructive" : "font-medium"}>{locationCheck.message}</p>
