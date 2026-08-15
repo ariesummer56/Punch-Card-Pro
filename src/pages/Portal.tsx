@@ -17,6 +17,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useI18n } from "@/lib/i18n";
+import { LanguageToggle } from "@/components/LanguageToggle";
 import { supabase } from "@/integrations/supabase/client";
 
 type PortalProps = {
@@ -155,6 +157,13 @@ type PayrollFrequency = "weekly" | "biweekly";
 type PayrollReportField = "include_employee_names" | "include_hours_worked" | "include_jobs_assigned" | "include_pto_used" | "include_holiday_pay" | "include_work_locations";
 type LocationCheckState = { status: "idle" | "checking" | "confirmed" | "low_accuracy_confirmed" | "blocked" | "error"; message: string; jobId?: string; latitude?: number; longitude?: number; accuracy?: number; distance?: number; checkedAt?: string };
 const isLocationCleared = (state: LocationCheckState) => state.status === "confirmed" || state.status === "low_accuracy_confirmed";
+
+// Jobs without a GPS pin don't require geofence verification — allows clock-in at shop/yard
+const isLocationReady = (state: LocationCheckState, job: Job | undefined) => {
+  if (!job) return false;
+  if (!isValidCoordinate(job.latitude, job.longitude)) return true;
+  return isLocationCleared(state) && state.jobId === job.id;
+};
 
 type EmployeeRow = Profile & { user_id: string };
 
@@ -899,6 +908,7 @@ const weakPasswordMessage = "That password is too common or easy to guess. Pleas
 const isWeakPassword = (value: string) => weakPasswordPattern.test(value.trim());
 
 const AdminDashboard = ({ managerOnly = false, loginPath = "/admin-login" }: { managerOnly?: boolean; loginPath?: string }) => {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const location = useLocation();
   const setupMode = !managerOnly && new URLSearchParams(location.search).get("setup") === "company";
@@ -3135,7 +3145,7 @@ const AdminDashboard = ({ managerOnly = false, loginPath = "/admin-login" }: { m
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div><p className="font-medium">Job assignments</p><p className="text-sm text-muted-foreground">{selectedIds.length} of {activeJobs.length} active jobs assigned</p></div>
           <div className="flex gap-2">
-            {isEditingAssignments ? <><Button className="h-10" type="button" onClick={() => saveEmployeeJobAssignments(employee.user_id)}><Save className="h-4 w-4" />Save</Button><Button className="h-10" type="button" variant="outline" onClick={() => cancelEmployeeAssignmentEdit(employee.user_id)}>Cancel</Button></> : <Button className="h-10" type="button" variant="outline" onClick={() => startEmployeeAssignmentEdit(employee.user_id)}><Edit3 className="h-4 w-4" />Edit</Button>}
+            {isEditingAssignments ? <><Button className="h-10" type="button" onClick={() => saveEmployeeJobAssignments(employee.user_id)}><Save className="h-4 w-4" />{t("common.save")}</Button><Button className="h-10" type="button" variant="outline" onClick={() => cancelEmployeeAssignmentEdit(employee.user_id)}>{t("common.cancel")}</Button></> : <Button className="h-10" type="button" variant="outline" onClick={() => startEmployeeAssignmentEdit(employee.user_id)}><Edit3 className="h-4 w-4" />Edit</Button>}
           </div>
         </div>
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -3152,12 +3162,12 @@ const AdminDashboard = ({ managerOnly = false, loginPath = "/admin-login" }: { m
           <p className="text-sm text-muted-foreground">Saving creates the employee in this company and emails them a one-time link to choose their own login password. There is no default password — they pick it when they open the link.</p>
         </div>
         <div className="flex gap-2">
-          <Button type="button" variant="ghost" onClick={() => { setAddingEmployee(false); setAddEmployeeForm(emptyAddEmployeeForm()); }} disabled={savingEmployee}>Cancel</Button>
+          <Button type="button" variant="ghost" onClick={() => { setAddingEmployee(false); setAddEmployeeForm(emptyAddEmployeeForm()); }} disabled={savingEmployee}>{t("common.cancel")}</Button>
           <Button type="submit" disabled={savingEmployee}>{savingEmployee ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}Save</Button>
         </div>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
-        <div className="space-y-2"><Label>Name</Label><Input maxLength={120} value={addEmployeeForm.displayName} onChange={(event) => setAddEmployeeForm((current) => ({ ...current, displayName: event.target.value }))} placeholder="Jordan Lee" /></div>
+        <div className="space-y-2"><Label>{t("emp.name")}</Label><Input maxLength={120} value={addEmployeeForm.displayName} onChange={(event) => setAddEmployeeForm((current) => ({ ...current, displayName: event.target.value }))} placeholder="Jordan Lee" /></div>
         <div className="space-y-2"><Label>Email address</Label><Input type="email" maxLength={255} value={addEmployeeForm.email} onChange={(event) => setAddEmployeeForm((current) => ({ ...current, email: event.target.value }))} placeholder="employee@company.com" /></div>
         <div className="space-y-2"><Label>Phone number</Label><Input maxLength={40} value={addEmployeeForm.phone} onChange={(event) => setAddEmployeeForm((current) => ({ ...current, phone: event.target.value }))} placeholder="(555) 010-1234" /></div>
         <div className="space-y-2"><Label>Emergency contact</Label><Input maxLength={160} value={addEmployeeForm.emergencyContact} onChange={(event) => setAddEmployeeForm((current) => ({ ...current, emergencyContact: event.target.value }))} placeholder="Name — phone" /></div>
@@ -3419,7 +3429,7 @@ const AdminDashboard = ({ managerOnly = false, loginPath = "/admin-login" }: { m
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction onClick={confirmSaveUserRole}>Save role</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -3486,7 +3496,7 @@ const AdminDashboard = ({ managerOnly = false, loginPath = "/admin-login" }: { m
             </div>
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setScheduleDialog(null)} disabled={savingSchedule}>Cancel</Button>
+            <Button type="button" variant="outline" onClick={() => setScheduleDialog(null)} disabled={savingSchedule}>{t("common.cancel")}</Button>
             <Button type="button" onClick={saveJobSchedule} disabled={savingSchedule || !scheduleForm.jobId}>{savingSchedule ? "Saving..." : (scheduleDialog?.editingId ? "Save changes" : "Queue job")}</Button>
           </DialogFooter>
         </DialogContent>
@@ -3505,7 +3515,7 @@ const AdminDashboard = ({ managerOnly = false, loginPath = "/admin-login" }: { m
                 <p className="font-medium">Password set successfully.</p>
                 <p className="mt-1 text-muted-foreground">Copy and share this password securely. It won't be shown again.</p>
                 <div className="mt-3 grid gap-2">
-                  <div><Label className="text-xs uppercase tracking-wide text-muted-foreground">Email</Label><Input readOnly value={setPwShown.email} /></div>
+                  <div><Label className="text-xs uppercase tracking-wide text-muted-foreground">{t("emp.email")}</Label><Input readOnly value={setPwShown.email} /></div>
                   <div><Label className="text-xs uppercase tracking-wide text-muted-foreground">Password</Label><Input readOnly value={setPwShown.password} /></div>
                 </div>
               </div>
@@ -3526,7 +3536,7 @@ const AdminDashboard = ({ managerOnly = false, loginPath = "/admin-login" }: { m
               </div>
               <Button type="button" variant="outline" size="sm" onClick={generateRandomPassword}>Generate a random one</Button>
               <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setSetPwTarget(null)} disabled={setPwSaving}>Cancel</Button>
+                <Button type="button" variant="outline" onClick={() => setSetPwTarget(null)} disabled={setPwSaving}>{t("common.cancel")}</Button>
                 <Button type="button" onClick={submitSetPassword} disabled={setPwSaving}>{setPwSaving ? "Saving..." : "Set password"}</Button>
               </DialogFooter>
             </div>
@@ -3553,7 +3563,7 @@ const AdminDashboard = ({ managerOnly = false, loginPath = "/admin-login" }: { m
             />
           </div>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={archivingJob}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={archivingJob}>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={(event) => { event.preventDefault(); confirmArchiveJob(); }}
               disabled={archivingJob || archiveConfirmText.trim() !== "DELETE"}
@@ -3572,7 +3582,7 @@ const AdminDashboard = ({ managerOnly = false, loginPath = "/admin-login" }: { m
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deletingEmployee}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={deletingEmployee}>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction onClick={confirmDeleteEmployee} disabled={deletingEmployee}>{deletingEmployee ? "Deleting..." : "Delete employee"}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -3590,7 +3600,7 @@ const AdminDashboard = ({ managerOnly = false, loginPath = "/admin-login" }: { m
             <Input value={overrideClockOutReason} onChange={(event) => setOverrideClockOutReason(event.target.value)} placeholder="Reason for GPS override" maxLength={200} />
           </div>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction onClick={adminOverrideClockOut}>Clock out (override)</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -3641,7 +3651,7 @@ const AdminDashboard = ({ managerOnly = false, loginPath = "/admin-login" }: { m
             );
           })()}
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOverrideClockInOpen(false)}>Cancel</Button>
+            <Button type="button" variant="outline" onClick={() => setOverrideClockInOpen(false)}>{t("common.cancel")}</Button>
             <Button type="button" onClick={adminOverrideClockIn}><Play className="h-4 w-4" />Clock in (override)</Button>
           </DialogFooter>
         </DialogContent>
@@ -3699,7 +3709,7 @@ const AdminDashboard = ({ managerOnly = false, loginPath = "/admin-login" }: { m
             );
           })()}
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setMissedClockInOpen(false)}>Cancel</Button>
+            <Button type="button" variant="outline" onClick={() => setMissedClockInOpen(false)}>{t("common.cancel")}</Button>
             <Button type="button" onClick={submitMissedClockIn}><Clock3 className="h-4 w-4" />Add missed clock-in</Button>
           </DialogFooter>
         </DialogContent>
@@ -3766,7 +3776,7 @@ const AdminDashboard = ({ managerOnly = false, loginPath = "/admin-login" }: { m
               <Button type="button" variant="destructive" onClick={deleteEntryFromDialog}><Trash2 className="h-4 w-4" />Delete entry</Button>
             ) : <span />}
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:gap-2">
-              <Button type="button" variant="outline" onClick={() => setEditEntryDialog((current) => ({ ...current, open: false }))}>Cancel</Button>
+              <Button type="button" variant="outline" onClick={() => setEditEntryDialog((current) => ({ ...current, open: false }))}>{t("common.cancel")}</Button>
               <Button type="button" onClick={submitEditEntry}><Save className="h-4 w-4" />{editEntryDialog.mode === "create" ? "Create entry" : "Save changes"}</Button>
             </div>
           </DialogFooter>
@@ -3888,7 +3898,7 @@ const AdminDashboard = ({ managerOnly = false, loginPath = "/admin-login" }: { m
                       {selectedJobPinDraft.isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                       Save Pin
                     </Button>
-                    <Button type="button" variant="ghost" onClick={() => setJobPinDraft(null)} disabled={selectedJobPinDraft.isSaving}>Cancel</Button>
+                    <Button type="button" variant="ghost" onClick={() => setJobPinDraft(null)} disabled={selectedJobPinDraft.isSaving}>{t("common.cancel")}</Button>
                   </>
                 ) : (
                   <Button type="button" variant="outline" onClick={() => startJobPinEdit(selectedAdminJob)}><Edit3 className="h-4 w-4" />Edit Pin</Button>
@@ -4082,7 +4092,7 @@ const AdminDashboard = ({ managerOnly = false, loginPath = "/admin-login" }: { m
                     <div className="mb-3 flex items-center gap-2">
                       <span className="flex h-9 w-9 items-center justify-center rounded-md bg-accent/30 text-accent-foreground"><UsersRound className="h-5 w-5" /></span>
                       <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Employees</p>
+                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">{t("nav.employees")}</p>
                         <p className="text-lg font-semibold leading-none">{openEntries.length}/{employees.length} on the clock</p>
                       </div>
                     </div>
@@ -4163,7 +4173,7 @@ const AdminDashboard = ({ managerOnly = false, loginPath = "/admin-login" }: { m
       <Accordion type="multiple" defaultValue={setupMode ? ["company"] : undefined} className="space-y-4">
         {<AccordionItem value="active-workers" className="rounded-lg border border-primary/20 bg-card px-5 shadow-[var(--shadow-panel)] sm:px-7">
           <AccordionTrigger className="py-5 text-left hover:no-underline">
-            <span className="flex items-center gap-3"><span className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary text-primary-foreground"><BriefcaseBusiness className="h-6 w-6" /></span><span><span className="block text-2xl font-semibold tracking-normal">Active Workers</span><span className="mt-1 block text-sm font-normal text-muted-foreground">See who is currently clocked in and where.</span></span></span>
+            <span className="flex items-center gap-3"><span className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary text-primary-foreground"><BriefcaseBusiness className="h-6 w-6" /></span><span><span className="block text-2xl font-semibold tracking-normal">{t("nav.dashboard")}</span><span className="mt-1 block text-sm font-normal text-muted-foreground">Vea quién está trabajando y dónde.</span></span></span>
           </AccordionTrigger>
           <AccordionContent className="space-y-3 pb-6">
             {!managerOnly ? (
@@ -4510,7 +4520,7 @@ const AdminDashboard = ({ managerOnly = false, loginPath = "/admin-login" }: { m
           <AccordionTrigger className="py-5 text-left hover:no-underline">
             <span className="flex items-center gap-3">
               <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary text-primary-foreground"><MapPin className="h-6 w-6" /></span>
-              <span className="block text-2xl font-semibold tracking-normal">Jobs and GPS pins</span>
+              <span className="block text-2xl font-semibold tracking-normal">{t("nav.jobs")}</span>
             </span>
           </AccordionTrigger>
           <AccordionContent className="space-y-5 pb-6">
@@ -4534,9 +4544,9 @@ const AdminDashboard = ({ managerOnly = false, loginPath = "/admin-login" }: { m
                 <TabsContent value="details" className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-2 sm:col-span-2"><Label>Job name</Label><Input data-job-name-input="true" disabled={managerOnly} value={jobForm.job_name} onChange={(event) => setJobForm({ ...jobForm, job_name: event.target.value })} placeholder="Main Street renovation" /></div>
                   <div className="space-y-2 sm:col-span-2"><Label>Job address</Label><Input disabled={managerOnly} value={jobForm.address} onChange={(event) => setJobForm({ ...jobForm, address: event.target.value })} placeholder="123 Jobsite Road" /></div>
-                  <div className="space-y-2"><Label>City</Label><Input disabled={managerOnly} value={jobForm.city} onChange={(event) => setJobForm({ ...jobForm, city: event.target.value })} placeholder="City" /></div>
-                  <div className="space-y-2"><Label>State</Label><Input disabled={managerOnly} value={jobForm.state} onChange={(event) => setJobForm({ ...jobForm, state: event.target.value })} placeholder="State" /></div>
-                  <div className="space-y-2 sm:col-span-2"><Label>Description</Label><Textarea disabled={managerOnly} maxLength={500} value={jobForm.job_description} onChange={(event) => setJobForm({ ...jobForm, job_description: event.target.value })} placeholder="Optional notes for the job" /></div>
+                  <div className="space-y-2"><Label>{t("jobs.city")}</Label><Input disabled={managerOnly} value={jobForm.city} onChange={(event) => setJobForm({ ...jobForm, city: event.target.value })} placeholder="City" /></div>
+                  <div className="space-y-2"><Label>{t("jobs.state")}</Label><Input disabled={managerOnly} value={jobForm.state} onChange={(event) => setJobForm({ ...jobForm, state: event.target.value })} placeholder="State" /></div>
+                  <div className="space-y-2 sm:col-span-2"><Label>{t("jobs.description")}</Label><Textarea disabled={managerOnly} maxLength={500} value={jobForm.job_description} onChange={(event) => setJobForm({ ...jobForm, job_description: event.target.value })} placeholder="Optional notes for the job" /></div>
                   <div className="space-y-2"><Label>GPS latitude</Label><Input type="number" step="0.000001" value={jobForm.latitude} onChange={(event) => setJobForm({ ...jobForm, latitude: event.target.value })} placeholder="42.534900" /></div>
                   <div className="space-y-2"><Label>GPS longitude</Label><Input type="number" step="0.000001" value={jobForm.longitude} onChange={(event) => setJobForm({ ...jobForm, longitude: event.target.value })} placeholder="-92.445300" /></div>
                   <div className="space-y-2"><Label>Scheduled start time</Label><Input disabled={managerOnly} type="time" value={jobForm.scheduled_start_time} onChange={(event) => setJobForm({ ...jobForm, scheduled_start_time: event.target.value })} /><p className="text-xs text-muted-foreground">Optional. Paid hours start at this time even if employees clock in earlier.</p></div>
@@ -4778,7 +4788,7 @@ const AdminDashboard = ({ managerOnly = false, loginPath = "/admin-login" }: { m
                         </div>
                         <div className="space-y-2"><Label>Latitude</Label><Input type="number" step="0.000001" value={managerJobDrafts[job.id]?.latitude ?? job.latitude?.toString() ?? ""} onChange={(event) => setManagerJobDrafts((current) => ({ ...current, [job.id]: { manager_notes: current[job.id]?.manager_notes ?? job.manager_notes ?? "", latitude: event.target.value, longitude: current[job.id]?.longitude ?? job.longitude?.toString() ?? "" } }))} /></div>
                         <div className="space-y-2"><Label>Longitude</Label><Input type="number" step="0.000001" value={managerJobDrafts[job.id]?.longitude ?? job.longitude?.toString() ?? ""} onChange={(event) => setManagerJobDrafts((current) => ({ ...current, [job.id]: { manager_notes: current[job.id]?.manager_notes ?? job.manager_notes ?? "", latitude: current[job.id]?.latitude ?? job.latitude?.toString() ?? "", longitude: event.target.value } }))} /></div>
-                        <Button className="h-11" type="button" onClick={() => saveManagerJob(job)}><Save className="h-4 w-4" />Save</Button>
+                        <Button className="h-11" type="button" onClick={() => saveManagerJob(job)}><Save className="h-4 w-4" />{t("common.save")}</Button>
                       </div>
                     ) : null}
                   </div>
@@ -4862,7 +4872,7 @@ const AdminDashboard = ({ managerOnly = false, loginPath = "/admin-login" }: { m
                           {selectedJobPinDraft.isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                           Save Pin
                         </Button>
-                        <Button type="button" variant="ghost" onClick={() => setJobPinDraft(null)} disabled={selectedJobPinDraft.isSaving}>Cancel</Button>
+                        <Button type="button" variant="ghost" onClick={() => setJobPinDraft(null)} disabled={selectedJobPinDraft.isSaving}>{t("common.cancel")}</Button>
                       </>
                     ) : (
                       <Button type="button" variant="outline" onClick={() => startJobPinEdit(selectedAdminJob)}><Edit3 className="h-4 w-4" />Edit Pin</Button>
@@ -4884,7 +4894,7 @@ const AdminDashboard = ({ managerOnly = false, loginPath = "/admin-login" }: { m
 
         <AccordionItem value="company-calendar" className="rounded-lg border border-primary/20 bg-card px-5 shadow-[var(--shadow-panel)] sm:px-7">
           <AccordionTrigger className="py-5 text-left hover:no-underline">
-            <span className="flex items-center gap-3"><span className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent text-accent-foreground"><CalendarDays className="h-6 w-6" /></span><span><span className="block text-2xl font-semibold tracking-normal">Company calendar</span><span className="mt-1 block text-sm font-normal text-muted-foreground">Company-wide holidays and jobs with activity. Per-employee hours live in Hours.</span></span></span>
+            <span className="flex items-center gap-3"><span className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent text-accent-foreground"><CalendarDays className="h-6 w-6" /></span><span><span className="block text-2xl font-semibold tracking-normal">{t("nav.company")}</span><span className="mt-1 block text-sm font-normal text-muted-foreground">Días festivos y trabajos con actividad. Horas por empleado en Horas.</span></span></span>
           </AccordionTrigger>
           <AccordionContent className="space-y-4 pb-6">
             <div className="grid gap-3 sm:grid-cols-[220px_1fr] sm:items-end">
@@ -4915,8 +4925,8 @@ const AdminDashboard = ({ managerOnly = false, loginPath = "/admin-login" }: { m
             <span className="flex items-center gap-3">
               <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary text-primary-foreground"><BarChart3 className="h-6 w-6" /></span>
               <span>
-                <span className="block text-2xl font-semibold tracking-normal">Reports & Email Automation</span>
-                <span className="mt-1 block text-sm font-normal text-muted-foreground">Analytics exports, payroll emails, and weekly summary settings.</span>
+                <span className="block text-2xl font-semibold tracking-normal">{t("nav.reports")}</span>
+                <span className="mt-1 block text-sm font-normal text-muted-foreground">Exportación de análisis, correos de nómina y resumen semanal.</span>
               </span>
             </span>
           </AccordionTrigger>
@@ -5201,7 +5211,7 @@ const AdminDashboard = ({ managerOnly = false, loginPath = "/admin-login" }: { m
                     <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Total hours</p><p className="text-xl font-semibold tabular-nums">{payrollTotals.hours.toFixed(2)}</p></div>
                     <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">PTO used</p><p className="text-xl font-semibold tabular-nums">{payrollTotals.pto.toFixed(2)}</p></div>
                     <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Holiday pay</p><p className="text-xl font-semibold tabular-nums">{payrollTotals.holiday.toFixed(2)}</p></div>
-                    <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Employees</p><p className="text-xl font-semibold tabular-nums">{payrollIncludedEmployeeCount}</p></div>
+                    <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">{t("nav.employees")}</p><p className="text-xl font-semibold tabular-nums">{payrollIncludedEmployeeCount}</p></div>
                     <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Rows</p><p className="text-xl font-semibold tabular-nums">{payrollRows.length}</p></div>
                   </div>
 
@@ -5426,7 +5436,7 @@ const AdminDashboard = ({ managerOnly = false, loginPath = "/admin-login" }: { m
 
                       <div className="grid gap-3 sm:grid-cols-3">
                         <div className="rounded-lg border bg-card p-4"><p className="text-xs text-muted-foreground">Total hours</p><p className="text-2xl font-semibold">{(grandMinutes / 60).toFixed(2)}</p></div>
-                        <div className="rounded-lg border bg-card p-4"><p className="text-xs text-muted-foreground">Employees</p><p className="text-2xl font-semibold">{grandEmployees.size}</p></div>
+                        <div className="rounded-lg border bg-card p-4"><p className="text-xs text-muted-foreground">{t("nav.employees")}</p><p className="text-2xl font-semibold">{grandEmployees.size}</p></div>
                         <div className="rounded-lg border bg-card p-4"><p className="text-xs text-muted-foreground">Time entries</p><p className="text-2xl font-semibold">{grandEntries}</p></div>
                       </div>
 
@@ -5438,7 +5448,7 @@ const AdminDashboard = ({ managerOnly = false, loginPath = "/admin-login" }: { m
                               <TableHead>Status</TableHead>
                               <TableHead>First → Last</TableHead>
                               <TableHead className="text-right">Hours</TableHead>
-                              <TableHead className="text-right">Employees</TableHead>
+                              <TableHead className="text-right">{t("nav.employees")}</TableHead>
                               <TableHead className="text-right">Entries</TableHead>
                               <TableHead></TableHead>
                             </TableRow>
@@ -5475,7 +5485,7 @@ const AdminDashboard = ({ managerOnly = false, loginPath = "/admin-login" }: { m
                           <div id="payroll-report-print" className="space-y-5 print:p-0">
                             <div className="grid gap-3 sm:grid-cols-3">
                               <div className="rounded-lg border bg-card p-4"><p className="text-xs text-muted-foreground">Total hours</p><p className="text-2xl font-semibold">{(breakdownTotalMinutes / 60).toFixed(2)}</p></div>
-                              <div className="rounded-lg border bg-card p-4"><p className="text-xs text-muted-foreground">Employees</p><p className="text-2xl font-semibold">{breakdownByEmp.length}</p></div>
+                              <div className="rounded-lg border bg-card p-4"><p className="text-xs text-muted-foreground">{t("nav.employees")}</p><p className="text-2xl font-semibold">{breakdownByEmp.length}</p></div>
                               <div className="rounded-lg border bg-card p-4"><p className="text-xs text-muted-foreground">Entries</p><p className="text-2xl font-semibold">{breakdownEntries.length}</p></div>
                             </div>
                             <div className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
@@ -5658,7 +5668,7 @@ const AdminDashboard = ({ managerOnly = false, loginPath = "/admin-login" }: { m
 
         {managerOnly ? <AccordionItem value="manager-employees" className="rounded-lg border border-primary/20 bg-card px-5 shadow-[var(--shadow-panel)] sm:px-7">
           <AccordionTrigger className="py-5 text-left hover:no-underline">
-            <span className="flex items-center gap-3"><span className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent text-accent-foreground"><UsersRound className="h-6 w-6" /></span><span><span className="block text-2xl font-semibold tracking-normal">Employees</span><span className="mt-1 block text-sm font-normal text-muted-foreground">Assign employees to jobs and adjust saved hours.</span></span></span>
+            <span className="flex items-center gap-3"><span className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent text-accent-foreground"><UsersRound className="h-6 w-6" /></span><span><span className="block text-2xl font-semibold tracking-normal">{t("nav.employees")}</span><span className="mt-1 block text-sm font-normal text-muted-foreground">Assign employees to jobs and adjust saved hours.</span></span></span>
           </AccordionTrigger>
           <AccordionContent className="space-y-4 pb-6">
             <div className="flex justify-end">
@@ -5684,9 +5694,9 @@ const AdminDashboard = ({ managerOnly = false, loginPath = "/admin-login" }: { m
                   {isOpen ? (
                     <div className="mt-4 space-y-4 rounded-lg border bg-card p-4">
                       <div className="grid gap-3 sm:grid-cols-2">
-                        <p><span className="block text-xs uppercase tracking-[0.14em] text-muted-foreground">Name</span>{employee.display_name || "Not set"}</p>
-                        <p><span className="block text-xs uppercase tracking-[0.14em] text-muted-foreground">Email</span>{employee.email || "Not set"}</p>
-                        <p><span className="block text-xs uppercase tracking-[0.14em] text-muted-foreground">Phone</span>{employee.phone || "Not set"}</p>
+                        <p><span className="block text-xs uppercase tracking-[0.14em] text-muted-foreground">{t("emp.name")}</span>{employee.display_name || "Not set"}</p>
+                        <p><span className="block text-xs uppercase tracking-[0.14em] text-muted-foreground">{t("emp.email")}</span>{employee.email || "Not set"}</p>
+                        <p><span className="block text-xs uppercase tracking-[0.14em] text-muted-foreground">{t("emp.phone")}</span>{employee.phone || "Not set"}</p>
                         <p><span className="block text-xs uppercase tracking-[0.14em] text-muted-foreground">Emergency contact</span>{employee.emergency_contact || "Not set"}</p>
                         <p><span className="block text-xs uppercase tracking-[0.14em] text-muted-foreground">PTO balance</span>Vacation {Number(balance.vacation_hours || 0).toFixed(2)} · Sick {Number(balance.sick_hours || 0).toFixed(2)} · Holiday {Number(balance.holiday_hours || 0).toFixed(2)} · Days off {Number(balance.day_off_hours || 0).toFixed(2)}</p>
                         <p><span className="block text-xs uppercase tracking-[0.14em] text-muted-foreground">PTO tier</span>{ptoSummary.tierLabel} · {ptoSummary.accrued.toFixed(2)} hrs accrued this anniversary year{ptoSummary.nextTier ? ` · Next tier ${formatDate(ptoSummary.nextTier)}` : ""}</p>
@@ -5710,7 +5720,7 @@ const AdminDashboard = ({ managerOnly = false, loginPath = "/admin-login" }: { m
                               <div><p className="font-medium">{jobLabel(entry.job_id)}{entry.is_late ? <span className="ml-2 inline-flex items-center rounded-full bg-destructive px-2 py-0.5 text-xs font-medium text-destructive-foreground">Late +{entry.late_minutes ?? 0}m</span> : null}</p><p className="text-sm text-muted-foreground">{entry.work_date} · {formatDateTime(entry.clock_in_at)} — {formatDateTime(entry.clock_out_at)}{entry.paid_start_at && entry.clock_in_at && entry.paid_start_at !== entry.clock_in_at ? <span className="ml-2 italic">(paid from {formatDateTime(entry.paid_start_at)})</span> : null}</p></div>
                               <div className="space-y-2"><Label>Break min</Label><Input type="number" min="0" value={draft.break_minutes} onChange={(event) => setManagerEntryDrafts((current) => ({ ...current, [entry.id]: { ...draft, break_minutes: event.target.value } }))} /></div>
                               <div className="space-y-2"><Label>Total hrs</Label><Input type="number" min="0" step="0.01" value={draft.total_hours} onChange={(event) => setManagerEntryDrafts((current) => ({ ...current, [entry.id]: { ...draft, total_hours: event.target.value } }))} /></div>
-                              <Button className="h-11" type="button" variant="outline" onClick={() => saveManagerEntry(entry)}><Save className="h-4 w-4" />Save</Button>
+                              <Button className="h-11" type="button" variant="outline" onClick={() => saveManagerEntry(entry)}><Save className="h-4 w-4" />{t("common.save")}</Button>
                             </div>
                           );
                         }) : <p className="text-sm text-muted-foreground">No recent hours for this employee.</p>}
@@ -5728,8 +5738,8 @@ const AdminDashboard = ({ managerOnly = false, loginPath = "/admin-login" }: { m
             <span className="flex items-center gap-3">
               <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent text-accent-foreground"><UserRound className="h-6 w-6" /></span>
               <span>
-                <span className="block text-2xl font-semibold tracking-normal">Employees</span>
-                <span className="mt-1 block text-sm font-normal text-muted-foreground">View employee profiles, assigned jobs, hours, PTO, and weekly email boxes.</span>
+                <span className="block text-2xl font-semibold tracking-normal">{t("nav.employees")}</span>
+                <span className="mt-1 block text-sm font-normal text-muted-foreground">Ver perfiles, trabajos asignados, horas, PTO y correos.</span>
               </span>
             </span>
           </AccordionTrigger>
@@ -5764,7 +5774,7 @@ const AdminDashboard = ({ managerOnly = false, loginPath = "/admin-login" }: { m
                       {isProfileEditing ? (
                         <>
                           <Button className="h-11" type="button" onClick={() => saveEmployeeProfile(employee.user_id)}><Save className="h-4 w-4" />Save profile</Button>
-                          <Button className="h-11" type="button" variant="outline" onClick={() => cancelEmployeeProfileEdit(employee.user_id)}>Cancel</Button>
+                          <Button className="h-11" type="button" variant="outline" onClick={() => cancelEmployeeProfileEdit(employee.user_id)}>{t("common.cancel")}</Button>
                         </>
                       ) : <Button className="h-11" type="button" variant="outline" onClick={() => startEmployeeProfileEdit(employee)}><Edit3 className="h-4 w-4" />Edit profile</Button>}
                       <Button className="h-11" type="button" variant="outline" onClick={() => sendEmployeePasswordReset(employee)} disabled={!employee.email} title="Emails the employee a one-time link to set or reset their login password."><LockKeyhole className="h-4 w-4" />Send password setup/reset link</Button>
@@ -5792,9 +5802,9 @@ const AdminDashboard = ({ managerOnly = false, loginPath = "/admin-login" }: { m
                       <div className="mt-2 space-y-2 text-muted-foreground">{employeeRequests.length ? employeeRequests.map((request) => <p key={request.id}>{ptoLabel(request.request_type)} · {request.start_date} to {request.end_date} · {request.status}</p>) : <p>No PTO requests yet.</p>}</div>
                     </div>
                   <div className="grid gap-3 rounded-lg border bg-card p-3 sm:grid-cols-2">
-                    <div className="space-y-2"><Label>Name</Label><Input disabled={!isProfileEditing} value={draft.display_name} onChange={(event) => updateEmployeeDraft(employee.user_id, { display_name: event.target.value })} /></div>
-                    <div className="space-y-2"><Label>Email</Label><Input disabled={!isProfileEditing} type="email" value={draft.email} onChange={(event) => updateEmployeeDraft(employee.user_id, { email: event.target.value })} /></div>
-                    <div className="space-y-2"><Label>Phone</Label><Input disabled={!isProfileEditing} value={draft.phone} onChange={(event) => updateEmployeeDraft(employee.user_id, { phone: event.target.value })} /></div>
+                    <div className="space-y-2"><Label>{t("emp.name")}</Label><Input disabled={!isProfileEditing} value={draft.display_name} onChange={(event) => updateEmployeeDraft(employee.user_id, { display_name: event.target.value })} /></div>
+                    <div className="space-y-2"><Label>{t("emp.email")}</Label><Input disabled={!isProfileEditing} type="email" value={draft.email} onChange={(event) => updateEmployeeDraft(employee.user_id, { email: event.target.value })} /></div>
+                    <div className="space-y-2"><Label>{t("emp.phone")}</Label><Input disabled={!isProfileEditing} value={draft.phone} onChange={(event) => updateEmployeeDraft(employee.user_id, { phone: event.target.value })} /></div>
                     <div className="space-y-2"><Label>Emergency contact</Label><Input disabled={!isProfileEditing} value={draft.emergency_contact} onChange={(event) => updateEmployeeDraft(employee.user_id, { emergency_contact: event.target.value })} /></div>
                   </div>
                   <div className="mt-4 grid gap-3 sm:grid-cols-3">
@@ -5856,7 +5866,7 @@ const AdminDashboard = ({ managerOnly = false, loginPath = "/admin-login" }: { m
               <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary text-primary-foreground"><Building2 className="h-6 w-6" /></span>
               <span>
                 <span className="block text-sm font-semibold uppercase tracking-[0.16em] text-primary">Admin setup</span>
-                <span className="mt-1 block text-2xl font-semibold tracking-normal">Company information</span>
+                <span className="mt-1 block text-2xl font-semibold tracking-normal">{t("nav.company")}</span>
               </span>
             </span>
           </AccordionTrigger>
@@ -5895,6 +5905,7 @@ const AdminDashboard = ({ managerOnly = false, loginPath = "/admin-login" }: { m
 };
 
 const EmployeeDashboard = () => {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const [userId, setUserId] = useState("");
   const [loading, setLoading] = useState(true);
@@ -6258,7 +6269,7 @@ const EmployeeDashboard = () => {
       return;
     }
     if (!isValidCoordinate(selectedJob.latitude, selectedJob.longitude)) {
-      setLocationCheck({ status: "blocked", message: "This job does not have a GPS pin yet. Ask an admin to set the job pin." });
+      setLocationCheck({ status: "confirmed", message: "No GPS pin for this location — clock in ready.", jobId: selectedJob.id });
       return;
     }
     if (!navigator.geolocation) {
@@ -6299,7 +6310,7 @@ const EmployeeDashboard = () => {
       toast.error("This job is archived. Ask an admin to unarchive it before clocking in.");
       return;
     }
-    if ((updates.clock_in_at || updates.clock_out_at) && (!isLocationCleared(locationCheck) || locationCheck.jobId !== actionJobId)) {
+    if ((updates.clock_in_at || updates.clock_out_at) && !isLocationReady(locationCheck, actionJob)) {
       toast.error(locationCheck.status === "checking" ? "GPS check is still running — wait for it to finish." : updates.clock_out_at ? "Tap Refresh GPS, then clock out." : locationCheck.status === "blocked" && locationCheck.distance != null ? `You are too far from the job site. Current distance: ${Math.round(locationCheck.distance)} meters.` : locationCheck.status === "error" ? locationCheck.message : "Tap Refresh GPS, then clock in.");
       return;
     }
@@ -6389,7 +6400,8 @@ const EmployeeDashboard = () => {
       toast.error("This job is archived.");
       return;
     }
-    if (!isLocationCleared(locationCheck) || locationCheck.jobId !== newJobId) {
+    const newJobHasGps = isValidCoordinate(newJob.latitude, newJob.longitude);
+    if (newJobHasGps && (!isLocationCleared(locationCheck) || locationCheck.jobId !== newJobId)) {
       toast.error("Tap Refresh GPS at the new job before switching.");
       return;
     }
@@ -6452,7 +6464,9 @@ const EmployeeDashboard = () => {
       toast.error("No active shift to end.");
       return;
     }
-    if (!isLocationCleared(locationCheck) || locationCheck.jobId !== timeEntry.job_id) {
+    const currentJob = jobs.find((j) => j.id === timeEntry.job_id);
+    const currentJobHasGps = currentJob ? isValidCoordinate(currentJob.latitude, currentJob.longitude) : false;
+    if (currentJobHasGps && (!isLocationCleared(locationCheck) || locationCheck.jobId !== timeEntry.job_id)) {
       toast.error("Tap Refresh GPS before ending the shift.");
       return;
     }
@@ -6545,7 +6559,7 @@ const EmployeeDashboard = () => {
             <form className="space-y-4" onSubmit={verifyPin}>
               <Input inputMode="numeric" maxLength={4} value={pinInput} onChange={(event) => setPinInput(event.target.value.replace(/\D/g, ""))} className="h-16 text-center text-3xl tracking-[0.35em]" placeholder="0000" />
               <Button className="h-14 w-full text-base" type="submit">Unlock dashboard</Button>
-              <Button className="h-12 w-full" variant="ghost" type="button" onClick={signOut}>Sign out</Button>
+              <Button className="h-12 w-full" variant="ghost" type="button" onClick={signOut}>{t("prof.logout")}</Button>
             </form>
           </CardContent>
         </Card>
@@ -6592,7 +6606,7 @@ const EmployeeDashboard = () => {
             <p className="text-muted-foreground">{selectedJob.job_description || "No job description added yet."}</p>
             {selectedJob.manager_notes ? <div className="rounded-md border border-primary/30 bg-primary/5 p-3"><p className="text-xs font-semibold uppercase tracking-wide text-primary">Manager Notes</p><p className="mt-1 text-foreground">{selectedJob.manager_notes}</p></div> : null}
             {assignmentNotes[selectedJob.id] ? <div className="rounded-md border border-primary/30 bg-primary/5 p-3"><p className="text-xs font-semibold uppercase tracking-wide text-primary">Your Assignment Notes</p><p className="mt-1 text-foreground">{assignmentNotes[selectedJob.id]}</p></div> : null}
-            <p className="text-muted-foreground">{selectedJob.latitude != null && selectedJob.longitude != null ? `GPS pin active · 100 meter clock-in and clock-out radius` : "This job does not have a GPS pin yet."}</p>
+            <p className="text-muted-foreground">{selectedJob.latitude != null && selectedJob.longitude != null ? `GPS pin active · 100 meter clock-in and clock-out radius` : "No GPS pin — clock in available without location check."}</p>
             <div className={locationCheck.status === "blocked" ? "rounded-md border border-destructive/40 bg-card p-3" : "rounded-md border bg-card p-3"}>
               <p className={locationCheck.status === "confirmed" ? "font-medium text-primary" : locationCheck.status === "blocked" ? "font-medium text-destructive" : "font-medium"}>{locationCheck.message}</p>
               {locationCheck.distance != null ? <p className="mt-1 text-xs text-muted-foreground">Current distance: {Math.round(locationCheck.distance)} meters from job site · GPS accuracy: {Math.round(locationCheck.accuracy ?? 0)} meters</p> : <p className="mt-1 text-xs text-muted-foreground">Location permission is required on mobile before clocking in or out.</p>}
@@ -6611,12 +6625,12 @@ const EmployeeDashboard = () => {
             <p className="mt-2 text-muted-foreground">Week total: {formatHours(weeklyMinutes)}</p>
             <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
               {isClockedIn && selectedJobId && selectedJobId !== timeEntry?.job_id ? (
-                <Button className="h-20 flex-col text-base" disabled={timeActionSaving || !isSelectedJobAssigned || !!selectedJob?.archived_at || !isLocationCleared(locationCheck) || locationCheck.jobId !== selectedJobId} onClick={() => switchJob(selectedJobId)}>{timeActionSaving ? <Loader2 className="h-7 w-7 animate-spin" /> : <Play className="h-7 w-7" />}Switch to {selectedJob?.job_name ?? "this job"}</Button>
+                <Button className="h-20 flex-col text-base" disabled={timeActionSaving || !isSelectedJobAssigned || !!selectedJob?.archived_at || !isLocationReady(locationCheck, selectedJob)} onClick={() => switchJob(selectedJobId)}>{timeActionSaving ? <Loader2 className="h-7 w-7 animate-spin" /> : <Play className="h-7 w-7" />}Switch to {selectedJob?.job_name ?? "this job"}</Button>
               ) : (
-                <Button className="h-20 flex-col text-base" disabled={timeActionSaving || !selectedJobId || !isSelectedJobAssigned || !!selectedJob?.archived_at || !isLocationCleared(locationCheck) || locationCheck.jobId !== selectedJobId || isClockedIn} onClick={() => upsertEntry({ clock_in_at: new Date().toISOString() })}>{timeActionSaving ? <Loader2 className="h-7 w-7 animate-spin" /> : <Play className="h-7 w-7" />}Clock in</Button>
+                <Button className="h-20 flex-col text-base" disabled={timeActionSaving || !selectedJobId || !isSelectedJobAssigned || !!selectedJob?.archived_at || !isLocationReady(locationCheck, selectedJob) || isClockedIn} onClick={() => upsertEntry({ clock_in_at: new Date().toISOString() })}>{timeActionSaving ? <Loader2 className="h-7 w-7 animate-spin" /> : <Play className="h-7 w-7" />}Clock in</Button>
               )}
               <Button className="h-20 flex-col text-base" variant="outline" disabled={timeActionSaving || !timeEntry?.clock_in_at || !!timeEntry?.clock_out_at} onClick={() => upsertEntry({ break_minutes: (timeEntry?.break_minutes ?? 0) + 30 })}>{timeActionSaving ? <Loader2 className="h-7 w-7 animate-spin" /> : <Coffee className="h-7 w-7" />}Break +30</Button>
-              <Button className="h-20 flex-col text-base" variant="secondary" disabled={timeActionSaving || !timeEntry?.clock_in_at || !!timeEntry?.clock_out_at || !isLocationCleared(locationCheck) || locationCheck.jobId !== timeEntry?.job_id} onClick={endShift}>{timeActionSaving ? <Loader2 className="h-7 w-7 animate-spin" /> : <Square className="h-7 w-7" />}End shift</Button>
+              <Button className="h-20 flex-col text-base" variant="secondary" disabled={timeActionSaving || !timeEntry?.clock_in_at || !!timeEntry?.clock_out_at || !isLocationReady(locationCheck, jobs.find((j) => j.id === timeEntry?.job_id))} onClick={endShift}>{timeActionSaving ? <Loader2 className="h-7 w-7 animate-spin" /> : <Square className="h-7 w-7" />}End shift</Button>
             </div>
             {shiftEndedToday ? (
               <div className="mt-3 rounded-lg border border-primary/40 bg-primary/10 p-3 text-sm">
@@ -6672,7 +6686,7 @@ const EmployeeDashboard = () => {
                   <Textarea id="end-shift-note" maxLength={500} value={endShiftNote} onChange={(e) => setEndShiftNote(e.target.value)} placeholder="e.g. Finished siding on the south side, cleaned up debris" />
                 </div>
                 <DialogFooter>
-                  <Button variant="outline" onClick={() => setEndShiftDialogOpen(false)}>Cancel</Button>
+                  <Button variant="outline" onClick={() => setEndShiftDialogOpen(false)}>{t("common.cancel")}</Button>
                   <Button onClick={confirmEndShift} disabled={timeActionSaving}>
                     {timeActionSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Square className="h-4 w-4" />}
                     End shift
@@ -6714,7 +6728,7 @@ const EmployeeDashboard = () => {
                   </div>
                 </div>
                 <DialogFooter>
-                  <Button variant="outline" onClick={() => setMissedClockInDialogOpen(false)}>Cancel</Button>
+                  <Button variant="outline" onClick={() => setMissedClockInDialogOpen(false)}>{t("common.cancel")}</Button>
                   <Button onClick={submitMissedClockIn} disabled={timeActionSaving || !missedClockInForm.job_id || !missedClockInForm.clock_in_at}>
                     {timeActionSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                     Add clock-in
@@ -6785,7 +6799,7 @@ const EmployeeDashboard = () => {
         <Card className="border-primary/20 shadow-[var(--shadow-panel)]">
           <CardHeader className="p-5">
             <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-primary text-primary-foreground"><CalendarDays className="h-6 w-6" /></div>
-            <CardTitle className="text-2xl tracking-normal">Company calendar</CardTitle>
+            <CardTitle className="text-2xl tracking-normal">Calendario de Empresa</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4 p-5 pt-0">
             <Input type="month" value={calendarMonth} onChange={(event) => setCalendarMonth(event.target.value || today().slice(0, 7))} className="h-11 bg-card" />
@@ -6815,7 +6829,7 @@ const EmployeeDashboard = () => {
       <Card className="border-primary/20 shadow-[var(--shadow-panel)]">
         <CardHeader className="p-5">
           <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-accent text-accent-foreground"><BriefcaseBusiness className="h-6 w-6" /></div>
-          <CardTitle className="text-2xl tracking-normal">Company information</CardTitle>
+          <CardTitle className="text-2xl tracking-normal">{t("nav.company")}</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-3 p-5 pt-0 sm:grid-cols-2">
           <div className="rounded-lg border bg-secondary p-3 text-sm">
@@ -6823,7 +6837,7 @@ const EmployeeDashboard = () => {
             <p className="mt-1 font-medium">{companyInfo?.name || companyName || "Not set"}</p>
           </div>
           <div className="rounded-lg border bg-secondary p-3 text-sm">
-            <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Phone</p>
+            <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{t("emp.phone")}</p>
             <p className="mt-1 font-medium">{companyInfo?.contact_phone || "Not set"}</p>
           </div>
           <div className="rounded-lg border bg-secondary p-3 text-sm">
@@ -6841,6 +6855,7 @@ const EmployeeDashboard = () => {
 };
 
 const Portal = ({ role }: PortalProps) => {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const isAdmin = role === "admin";
 
@@ -6860,7 +6875,7 @@ const Portal = ({ role }: PortalProps) => {
             </span>
             Punch Card Pro
           </Link>
-          <Button variant="outline" onClick={signOut}><LogOut className="h-4 w-4" /> Sign out</Button>
+          <div className="flex items-center gap-2"><LanguageToggle /><Button variant="outline" onClick={signOut}><LogOut className="h-4 w-4" /> Sign out</Button></div>
         </header>
 
         {role === "admin" ? <AdminDashboard /> : role === "manager" ? <AdminDashboard managerOnly loginPath="/manager-login" /> : <EmployeeDashboard />}
